@@ -249,7 +249,12 @@ int main(int argc, char **argv)
 
     {
         fprintf(stdout, "\n#ifdef ");
+        generate_guard(stdout, array_type, "IMPLEMENTATION");
+        fprintf(stdout, "#undef ");
         generate_guard(stdout, array_type, "IMPLEMENTATION\n");
+    }
+
+    {
         generate_impl(stdout, IMPL_RESERVE, "static void", array_type, value_type, "reserve", "size_t", "count");
         generate_impl(stdout, IMPL_FREE, "void", array_type, value_type, "free");
     }
