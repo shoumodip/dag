@@ -62,6 +62,10 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
             fputs(array_type, stream);
         } else if (ch == '#') {
             fputs(value_type, stream);
+        } else if (ch == '$') {
+            for (size_t i = 0; i < strlen(array_type); ++i) {
+                fputc(toupper(array_type[i]), stream);
+            }
         } else {
             fputc(ch, stream);
         }
@@ -74,7 +78,7 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
 void generate_guard(FILE *stream, const char *array_type, const char *suffix)
 {
     for (size_t i = 0; i < strlen(array_type); ++i) {
-        fprintf(stream, "%c", toupper(array_type[i]));
+        fputc(toupper(array_type[i]), stream);
     }
     fprintf(stream, "_%s\n", suffix);
 }
@@ -151,7 +155,7 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
 
 #define IMPL_FIND \
     "    for (size_t i = index; i < ?->count; ++i) {\n" \
-    "        if (!memcmp(?->data + i, &pred, sizeof(#))) {\n" \
+    "        if (!$_CMP(?->data + i, &pred, 1)) {\n" \
     "            return i;\n" \
     "        }\n" \
     "    }\n" \
@@ -159,7 +163,7 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
 
 #define IMPL_FIND_MULTI \
     "    for (size_t i = index; i + count <= ?->count; ++i) {\n" \
-    "        if (!memcmp(?->data + i, pred, count * sizeof(#))) {\n" \
+    "        if (!$_CMP(?->data + i, pred, count)) {\n" \
     "            return i;\n" \
     "        }\n" \
     "    }\n" \
@@ -258,6 +262,18 @@ int main(int argc, char **argv)
         generate_impl(stdout, IMPL_RESERVE, "static void", array_type, value_type, "reserve", "size_t", "count");
         generate_impl(stdout, IMPL_FREE, "void", array_type, value_type, "free");
     }
+
+    {
+        fprintf(stdout, "#ifndef ");
+        generate_guard(stdout, array_type, "CMP");
+
+        fprintf(stdout, "#define ");
+        generate_guard(stdout, array_type, "CMP(a, b, len) (memcmp(a, b, len))");
+
+        fprintf(stdout, "#endif // ");
+        generate_guard(stdout, array_type, "CMP\n");
+    }
+
 
     {
         generate_impl(stdout, IMPL_PUSH, "void", array_type, value_type, "push", value_type, "value");
