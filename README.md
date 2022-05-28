@@ -23,3 +23,7 @@ int main(void)
     xs_free(&xs);
 }
 ```
+
+## Notes
+- [STB](https://github.com/nothings/stb)
+- [Header only Libraries](https://github.com/nothings/stb/blob/master/docs/stb_howto.txt)
