@@ -60,12 +60,18 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
         const char ch = *body++;
         if (ch == '?') {
             fputs(array_type, stream);
-        } else if (ch == '#') {
+        } else if (ch == '^') {
             fputs(value_type, stream);
         } else if (ch == '$') {
             for (size_t i = 0; i < strlen(array_type); ++i) {
                 fputc(toupper(array_type[i]), stream);
             }
+        } else if (ch == '%') {
+            for (size_t i = 0; i < strlen(value_type); ++i) {
+                fputc(toupper(value_type[i]), stream);
+            }
+        } else if (ch == '@') {
+            generate_struct(stream, array_type);
         } else {
             fputc(ch, stream);
         }
@@ -84,6 +90,9 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
 }
 
 #define IMPL_FREE \
+    "#ifdef %_FREE\n" \
+    "    for (size_t i = 0; i < ?->count; ++i) %_FREE(?->data + i);\n" \
+    "#endif // %_FREE\n" \
     "    free(?->data);\n" \
     "    memset(?, 0, sizeof(*?));\n"
 
@@ -92,7 +101,7 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
     "    if (count > ?->capacity) {\n" \
     "        ?->capacity += DA_MINIMUM_CAPACITY;\n" \
     "        if (?->capacity < count) ?->capacity = count;\n" \
-    "        ?->data = realloc(?->data, ?->capacity * sizeof(#));\n" \
+    "        ?->data = realloc(?->data, ?->capacity * sizeof(^));\n" \
     "        assert(?->data);\n" \
     "    }\n"
 
@@ -102,7 +111,7 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
 
 #define IMPL_INSERT \
     "    ?_reserve(?, 1);\n" \
-    "    memmove(?->data + index + 1, ?->data + index, (?->count - index) * sizeof(#));\n" \
+    "    memmove(?->data + index + 1, ?->data + index, (?->count - index) * sizeof(^));\n" \
     "    ?->data[index] = value;\n" \
     "    ?->count++;\n"
 
@@ -112,25 +121,25 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
 
 #define IMPL_PUSH_MULTI \
     "    ?_reserve(?, count);\n" \
-    "    memcpy(?->data + ?->count, src, count * sizeof(#));\n" \
+    "    memcpy(?->data + ?->count, src, count * sizeof(^));\n" \
     "    ?->count += count;\n" \
 
 #define IMPL_INSERT_MULTI \
     "    ?_reserve(?, count);\n" \
-    "    memmove(?->data + index + count, ?->data + index, (?->count - index) * sizeof(#));\n" \
-    "    memcpy(?->data + index, src, count * sizeof(#));\n" \
+    "    memmove(?->data + index + count, ?->data + index, (?->count - index) * sizeof(^));\n" \
+    "    memcpy(?->data + index, src, count * sizeof(^));\n" \
     "    ?->count += count;\n"
 
 #define IMPL_POP_MULTI \
     "    if (count > ?->count) count = ?->count;\n" \
-    "    if (dst) memcpy(dst, ?->data + ?->count - count, count * sizeof(#));\n" \
+    "    if (dst) memcpy(dst, ?->data + ?->count - count, count * sizeof(^));\n" \
     "    ?->count -= count;\n" \
     "    return count;\n"
 
 #define IMPL_DELETE \
     "    assert(?->count > index);\n" \
-    "    const # value = ?->data[index];\n" \
-    "    memmove(?->data + index, ?->data + index + 1, (?->count - index - 1) * sizeof(#));\n" \
+    "    const ^ value = ?->data[index];\n" \
+    "    memmove(?->data + index, ?->data + index + 1, (?->count - index - 1) * sizeof(^));\n" \
     "    ?->count--;\n" \
     "    return value;\n" \
 
@@ -141,16 +150,16 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
 #define IMPL_DELETE_MULTI \
     "    if (index >= ?->count) return 0;\n" \
     "    if (index + count > ?->count) count = ?->count - index;\n" \
-    "    if (dst) memcpy(dst, ?->data + index, count * sizeof(#));\n" \
-    "    memmove(?->data + index, ?->data + index + count, (?->count - index - count) * sizeof(#));\n" \
+    "    if (dst) memcpy(dst, ?->data + index, count * sizeof(^));\n" \
+    "    memmove(?->data + index, ?->data + index + count, (?->count - index - count) * sizeof(^));\n" \
     "    ?->count -= count;\n" \
     "    return count;\n"
 
 #define IMPL_REPLACE_MULTI \
     "    if (index >= ?->count) return 0;\n" \
     "    if (index + count > ?->count) count = ?->count - index;\n" \
-    "    if (dst) memcpy(dst, ?->data + index, count * sizeof(#));\n" \
-    "    memcpy(?->data + index, src, count * sizeof(#));\n" \
+    "    if (dst) memcpy(dst, ?->data + index, count * sizeof(^));\n" \
+    "    memcpy(?->data + index, src, count * sizeof(^));\n" \
     "    return count;\n"
 
 #define IMPL_FIND \
@@ -169,6 +178,12 @@ void generate_guard(FILE *stream, const char *array_type, const char *suffix)
     "    }\n" \
     "    return -1;\n"
 
+#define IMPL_SPLIT \
+    "    @ rhs = {0};\n" \
+    "    ?_push_multi(&rhs, ?->data + index, ?->count - index);\n" \
+    "    ?->count = index;\n" \
+    "    return rhs;\n"
+
 int main(int argc, char **argv)
 {
     if (argc != 3) {
@@ -179,6 +194,10 @@ int main(int argc, char **argv)
 
     const char *array_type = argv[1];
     const char *value_type = argv[2];
+
+    char struct_type[strlen(array_type) + 1];
+    strcpy(struct_type, array_type);
+    *struct_type = toupper(*struct_type);
 
     {
         fprintf(stdout, "#ifndef ");
@@ -246,6 +265,11 @@ int main(int argc, char **argv)
         generate_decl(stdout, "long", array_type, "find_multi", "size_t", "index", "const", value_type, "*pred", "size_t", "count");
     }
 
+    fprintf(stdout, "\n");
+    {
+        generate_decl(stdout, struct_type, array_type, "split", "size_t", "index");
+    }
+
     {
         fprintf(stdout, "\n#endif // ");
         generate_guard(stdout, array_type, "H");
@@ -303,6 +327,10 @@ int main(int argc, char **argv)
     {
         generate_impl(stdout, IMPL_FIND, "long", array_type, value_type, "find", "size_t", "index", value_type, "pred");
         generate_impl(stdout, IMPL_FIND_MULTI, "long", array_type, value_type, "find_multi", "size_t", "index", "const", value_type, "*pred", "size_t", "count");
+    }
+
+    {
+        generate_impl(stdout, IMPL_SPLIT, struct_type, array_type, value_type, "split", "size_t", "index");
     }
 
     {
