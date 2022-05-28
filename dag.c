@@ -231,6 +231,12 @@ int main(int argc, char **argv)
     fprintf(stdout, "\n");
     {
         generate_decl(stdout, "void", array_type, "free");
+
+        fprintf(stdout, "#define ");
+        for (size_t i = 0; i < strlen(array_type); ++i) {
+            fputc(toupper(array_type[i]), stdout);
+        }
+        fprintf(stdout, "_FREE %s_free\n", array_type);
     }
 
     fprintf(stdout, "\n");
