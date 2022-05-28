@@ -63,8 +63,8 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
         } else if (ch == '#') {
             fputs(value_type, stream);
         } else if (ch == '$') {
-            for (size_t i = 0; i < strlen(value_type); ++i) {
-                fputc(toupper(value_type[i]), stream);
+            for (size_t i = 0; i < strlen(array_type); ++i) {
+                fputc(toupper(array_type[i]), stream);
             }
         } else {
             fputc(ch, stream);
@@ -265,16 +265,16 @@ int main(int argc, char **argv)
 
     {
         fprintf(stdout, "#ifndef ");
-        generate_guard(stdout, value_type, "CMP");
+        generate_guard(stdout, array_type, "CMP");
 
         fprintf(stdout, "#define ");
-        for (size_t i = 0; i < strlen(value_type); ++i) {
-            fputc(toupper(value_type[i]), stdout);
+        for (size_t i = 0; i < strlen(array_type); ++i) {
+            fputc(toupper(array_type[i]), stdout);
         }
         fprintf(stdout, "_CMP(a, b, len) (memcmp(a, b, (len) * sizeof(%s)))\n", value_type);
 
         fprintf(stdout, "#endif // ");
-        generate_guard(stdout, value_type, "CMP\n");
+        generate_guard(stdout, array_type, "CMP\n");
     }
 
 
