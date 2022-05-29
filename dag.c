@@ -120,6 +120,7 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
     "    $(IDENT)->data[$(IDENT)->count++] = value;\n"
 
 #define IMPL_INSERT \
+    "    assert(index < $(IDENT)->count);\n" \
     "    $(IDENT)_reserve($(IDENT), 1);\n" \
     "    memmove($(IDENT)->data + index + 1, $(IDENT)->data + index, ($(IDENT)->count - index) * sizeof($(VALUE)));\n" \
     "    $(IDENT)->data[index] = value;\n" \
@@ -135,6 +136,7 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
     "    $(IDENT)->count += count;\n" \
 
 #define IMPL_INSERT_MULTI \
+    "    assert(index + count <= $(IDENT)->count);\n" \
     "    $(IDENT)_reserve($(IDENT), count);\n" \
     "    memmove($(IDENT)->data + index + count, $(IDENT)->data + index, ($(IDENT)->count - index) * sizeof($(VALUE)));\n" \
     "    memcpy($(IDENT)->data + index, src, count * sizeof($(VALUE)));\n" \
@@ -147,15 +149,17 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
     "    return count;\n"
 
 #define IMPL_DELETE \
-    "    assert($(IDENT)->count > index);\n" \
+    "    assert(index < $(IDENT)->count);\n" \
     "    const $(VALUE) value = $(IDENT)->data[index];\n" \
     "    memmove($(IDENT)->data + index, $(IDENT)->data + index + 1, ($(IDENT)->count - index - 1) * sizeof($(VALUE)));\n" \
     "    $(IDENT)->count--;\n" \
     "    return value;\n" \
 
 #define IMPL_REPLACE \
-    "    assert($(IDENT)->count > index);\n" \
-    "    $(IDENT)->data[index] = value;\n"
+    "    assert(index < $(IDENT)->count);\n" \
+    "    const $(VALUE) replacement = $(IDENT)->data[index];\n" \
+    "    $(IDENT)->data[index] = value;\n" \
+    "    return replacement;\n"
 
 #define IMPL_DELETE_MULTI \
     "    if (index >= $(IDENT)->count) return 0;\n" \
@@ -189,6 +193,7 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
     "    return -1;\n"
 
 #define IMPL_SPLIT \
+    "    if (index > $(IDENT)->count) index = $(IDENT)->count;\n" \
     "    $(ARRAY) rhs = {0};\n" \
     "    $(IDENT)_push_multi(&rhs, $(IDENT)->data + index, $(IDENT)->count - index);\n" \
     "    $(IDENT)->count = index;\n" \
@@ -327,52 +332,80 @@ int main(int argc, char **argv)
         fprintf(stream, "} %s;\n", array_name);
     }
 
-    fprintf(stream, "\n");
     {
-        fprintf(stream, "#define %s_free %s_free\n", ident_name, ident_name);
+        fprintf(stream, "\n// Free the data associated with '%s'.\n", ident_name);
         generate_decl(stream, "void", "free");
+
+        fprintf(stream, "\n// Reserve space for 'count' elements in '%s'.\n", ident_name);
+        fprintf(stream, "//\n// NOTE: This function panics if memory cannot be allocated.\n");
         generate_decl(stream, "void", "reserve", "size_t", "count");
     }
 
-    fprintf(stream, "\n");
     {
+        fprintf(stream, "\n// Push 'value' at the end of '%s'.\n", ident_name);
         generate_decl(stream, "void", "push", value_name, "value");
+
+        fprintf(stream, "\n// Insert 'value' at 'index' in '%s'.\n", ident_name);
+        fprintf(stream, "//\n// NOTE: This function panics if 'index' exceeds the size of the array.\n");
         generate_decl(stream, "void", "insert", value_name, "value", "size_t", "index");
+
+        fprintf(stream, "\n// Pop the last element in '%s'.\n//\n", ident_name);
+        fprintf(stream, "// NOTE: This function panics if there is no last element.\n");
+        fprintf(stream, "//       Use '%s_pop_multi' if you want to handle it yourself.\n", ident_name);
         generate_decl(stream, value_name, "pop");
     }
 
-    fprintf(stream, "\n");
     {
+        fprintf(stream, "\n// Push 'count' elements at the end of '%s'.\n", ident_name);
         generate_decl(stream, "void", "push_multi", "const", value_name, "*src", "size_t", "count");
+
+        fprintf(stream, "\n// Insert 'count' elements at 'index' in '%s'.\n", ident_name);
         generate_decl(stream, "void", "insert_multi", "const", value_name, "*src", "size_t", "count", "size_t", "index");
+
+        fprintf(stream, "\n// Pop at max 'count' elements from the end of '%s' into 'dst'.\n", ident_name);
+        fprintf(stream, "//\n// Returns the number of elements copied\n");
         generate_decl(stream, "size_t", "pop_multi", value_name, "*dst", "size_t", "count");
     }
 
-    fprintf(stream, "\n");
     {
+        fprintf(stream, "\n// Delete the element at 'index' in '%s' and return it.\n", ident_name);
+        fprintf(stream, "//\n// NOTE: This function panics if 'index' exceeds the size of the array.\n");
         generate_decl(stream, value_name, "delete", "size_t", "index");
-        generate_decl(stream, "void", "replace", "size_t", "index", value_name, "value");
+
+        fprintf(stream, "\n// Replace the element at 'index' in '%s' with 'value' and return the original\n// value.\n", ident_name);
+        fprintf(stream, "//\n// NOTE: This function panics if 'index' exceeds the size of the array.\n");
+        generate_decl(stream, value_name, "replace", "size_t", "index", value_name, "value");
     }
 
-    fprintf(stream, "\n");
     {
+        fprintf(stream, "\n// Delete at max 'count' elements from 'index' in '%s' into 'dst'.\n", ident_name);
+        fprintf(stream, "//\n// Returns the number of elements deleted\n");
         generate_decl(stream, "size_t", "delete_multi", "size_t", "index", "size_t", "count", value_name, "*dst");
+
+        fprintf(stream, "\n// Replace at max 'count' elements from 'index' in '%s' with 'src' and store\n// the original value in 'dst'.\n", ident_name);
+        fprintf(stream, "//\n// Returns the number of elements replaced\n");
         generate_decl(stream, "size_t", "replace_multi", "size_t", "index", "size_t", "count", value_name, "*dst", "const", value_name, "*src");
     }
 
-    fprintf(stream, "\n");
     {
+        fprintf(stream, "\n// Find the first occurence of 'pred' starting from 'index' in '%s'.\n", ident_name);
+        fprintf(stream, "//\n// If a match is found, return the index. Otherwise return -1.\n");
         generate_decl(stream, "long", "find", "size_t", "index", value_name, "pred");
+
+        fprintf(stream, "\n// Find the first occurence of contiguous sequence of predicates starting\n// from 'index' in '%s'.\n", ident_name);
+        fprintf(stream, "//\n// If a match is found, return the index of the start of the match.\n// Otherwise return -1.\n");
         generate_decl(stream, "long", "find_multi", "size_t", "index", "const", value_name, "*pred", "size_t", "count");
     }
 
-    fprintf(stream, "\n");
     {
+        fprintf(stream, "\n// Split '%s' at 'index' and return the left segment.\n", ident_name);
+        fprintf(stream, "//\n// If 'index' exceeds the size of '%s', it is reduced to the size of '%s'.\n", ident_name, ident_name);
         generate_decl(stream, array_name, "split", "size_t", "index");
     }
 
     {
-        fprintf(stream, "\n#endif // %s_H\n\n", guard_name);
+        fprintf(stream, "\n#define %s_free %s_free\n\n", ident_name, ident_name);
+        fprintf(stream, "#endif // %s_H\n\n", guard_name);
     }
 
     {
@@ -406,7 +439,7 @@ int main(int argc, char **argv)
 
     {
         generate_impl(stream, IMPL_DELETE, value_name, "delete", "size_t", "index");
-        generate_impl(stream, IMPL_REPLACE, "void", "replace", "size_t", "index", value_name, "value");
+        generate_impl(stream, IMPL_REPLACE, value_name, "replace", "size_t", "index", value_name, "value");
     }
 
     {
