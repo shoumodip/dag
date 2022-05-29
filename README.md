@@ -4,7 +4,7 @@ Dynamic Array library generator for C.
 ## Quick Start
 ```console
 $ ./build.sh
-$ ./dag xs int > xs.h
+$ ./dag xs int
 ```
 
 ```c
