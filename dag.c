@@ -74,6 +74,10 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
 
             if (!memcmp(body, "VALUE", 5)) {
                 fputs(value_name, stream);
+            } else if (!memcmp(body, "value", 5)) {
+                for (size_t i = 0; i < strlen(value_name); ++i) {
+                    fputc(tolower(value_name[i]), stream);
+                }
             } else if (!memcmp(body, "ARRAY", 5)) {
                 fputs(array_name, stream);
             } else if (!memcmp(body, "GUARD", 5)) {
@@ -96,8 +100,8 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
 #define generate_impl(...) generate_impl(__VA_ARGS__, NULL)
 
 #define IMPL_FREE \
-    "#ifdef $(VALUE)_free\n" \
-    "    for (size_t i = 0; i < $(IDENT)->count; ++i) $(VALUE)_free($(IDENT)->data + i);\n" \
+    "#ifdef $(value)_free\n" \
+    "    for (size_t i = 0; i < $(IDENT)->count; ++i) $(value)_free($(IDENT)->data + i);\n" \
     "#endif\n\n" \
     "    free($(IDENT)->data);\n" \
     "    memset($(IDENT), 0, sizeof(*$(IDENT)));\n"
@@ -325,8 +329,9 @@ int main(int argc, char **argv)
 
     fprintf(stream, "\n");
     {
-        generate_decl(stream, "void", "free");
         fprintf(stream, "#define %s_free %s_free\n", ident_name, ident_name);
+        generate_decl(stream, "void", "free");
+        generate_decl(stream, "void", "reserve", "size_t", "count");
     }
 
     fprintf(stream, "\n");
@@ -376,8 +381,8 @@ int main(int argc, char **argv)
     }
 
     {
-        generate_impl(stream, IMPL_RESERVE, "static void", "reserve", "size_t", "count");
         generate_impl(stream, IMPL_FREE, "void", "free");
+        generate_impl(stream, IMPL_RESERVE, "void", "reserve", "size_t", "count");
     }
 
     {
