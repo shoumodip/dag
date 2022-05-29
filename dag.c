@@ -422,6 +422,8 @@ int main(int argc, char **argv)
         fprintf(stream, "#endif // %s_IMPLEMENTATION\n", guard_name);
     }
 
+    printf("Generated %s\n", output_path);
+
     fclose(stream);
     if (output_owned) {
         free(output_path);
