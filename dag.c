@@ -176,22 +176,6 @@ void generate_impl(FILE *stream, const char *body, const char *return_type, cons
     "    memcpy($(IDENT)->data + index, src, count * sizeof($(VALUE)));\n" \
     "    return count;\n"
 
-#define IMPL_FIND \
-    "    for (size_t i = index; i < $(IDENT)->count; ++i) {\n" \
-    "        if (!$(IDENT)_compare($(IDENT)->data + i, &pred, 1)) {\n" \
-    "            return i;\n" \
-    "        }\n" \
-    "    }\n" \
-    "    return -1;\n"
-
-#define IMPL_FIND_MULTI \
-    "    for (size_t i = index; i + count <= $(IDENT)->count; ++i) {\n" \
-    "        if (!$(IDENT)_compare($(IDENT)->data + i, pred, count)) {\n" \
-    "            return i;\n" \
-    "        }\n" \
-    "    }\n" \
-    "    return -1;\n"
-
 #define IMPL_SPLIT \
     "    if (index > $(IDENT)->count) index = $(IDENT)->count;\n" \
     "    $(ARRAY) rhs = {0};\n" \
@@ -388,16 +372,6 @@ int main(int argc, char **argv)
     }
 
     {
-        fprintf(stream, "\n// Find the first occurence of 'pred' starting from 'index' in '%s'.\n", ident_name);
-        fprintf(stream, "//\n// If a match is found, return the index. Otherwise return -1.\n");
-        generate_decl(stream, "long", "find", "size_t", "index", value_name, "pred");
-
-        fprintf(stream, "\n// Find the first occurence of contiguous sequence of predicates starting\n// from 'index' in '%s'.\n", ident_name);
-        fprintf(stream, "//\n// If a match is found, return the index of the start of the match.\n// Otherwise return -1.\n");
-        generate_decl(stream, "long", "find_multi", "size_t", "index", "const", value_name, "*pred", "size_t", "count");
-    }
-
-    {
         fprintf(stream, "\n// Split '%s' at 'index' and return the left segment.\n", ident_name);
         fprintf(stream, "//\n// If 'index' exceeds the size of '%s', it is reduced to the size of '%s'.\n", ident_name, ident_name);
         generate_decl(stream, array_name, "split", "size_t", "index");
@@ -419,13 +393,6 @@ int main(int argc, char **argv)
     }
 
     {
-        fprintf(stream, "#ifndef %s_compare\n", ident_name);
-        fprintf(stream, "#define %s_compare(a, b, len) (memcmp(a, b, (len) * sizeof(%s)))\n", ident_name, value_name);
-        fprintf(stream, "#endif\n\n");
-    }
-
-
-    {
         generate_impl(stream, IMPL_PUSH, "void", "push", value_name, "value");
         generate_impl(stream, IMPL_INSERT, "void", "insert", value_name, "value", "size_t", "index");
         generate_impl(stream, IMPL_POP, value_name, "pop");
@@ -445,11 +412,6 @@ int main(int argc, char **argv)
     {
         generate_impl(stream, IMPL_DELETE_MULTI, "size_t", "delete_multi", "size_t", "index", "size_t", "count", value_name, "*dst");
         generate_impl(stream, IMPL_REPLACE_MULTI, "size_t", "replace_multi", "size_t", "index", "size_t", "count", value_name, "*dst", "const", value_name, "*src");
-    }
-
-    {
-        generate_impl(stream, IMPL_FIND, "long", "find", "size_t", "index", value_name, "pred");
-        generate_impl(stream, IMPL_FIND_MULTI, "long", "find_multi", "size_t", "index", "const", value_name, "*pred", "size_t", "count");
     }
 
     {
